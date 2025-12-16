@@ -5,7 +5,8 @@ with open('backend/settings.py', 'r') as f:
 
 # Добавляем import os если его нет
 if 'import os' not in content:
-    content = content.replace('from pathlib import Path', 'from pathlib import Path\nimport os')
+    content = content.replace('from pathlib import Path',
+                              'from pathlib import Path\nimport os')
 
 # Заменяем только DATABASES блок
 new_db_config = '''DATABASES = {
