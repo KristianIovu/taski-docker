@@ -1,0 +1,10 @@
+# Файл .dockerignore
+venv
+.git
+db.sqlite3
+.idea
+.vscode
+.env
+*.pyc
+__pycache__
+*.log
