@@ -80,3 +80,5 @@ jobs:
           context: ./gateway/
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/taski_gateway:latest
+
+# Trigger workflow run
