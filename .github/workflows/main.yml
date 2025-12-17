@@ -131,55 +131,45 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: 
+      # Дождёмся билда всех образов Taski
       - build_and_push_to_docker_hub
       - build_frontend_and_push_to_docker_hub
       - build_gateway_and_push_to_docker_hub
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
-      
-      - name: Setup SSH key with passphrase
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/private_key
-          chmod 600 ~/.ssh/private_key
-          ssh-keyscan -H ${{ secrets.HOST }} >> ~/.ssh/known_hosts
-      
-      - name: Test SSH connection
-        env:
-          SSH_PASSPHRASE: ${{ secrets.SSH_PASSPHRASE }}
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y sshpass
-          sshpass -p "$SSH_PASSPHRASE" ssh -i ~/.ssh/private_key -o StrictHostKeyChecking=no ${{ secrets.USER }}@${{ secrets.HOST }} "echo SSH connection successful"
-      
       # Копируем docker-compose.production.yml на продакшен-сервер
       - name: Copy docker-compose.yml via ssh
-        env:
-          SSH_PASSPHRASE: ${{ secrets.SSH_PASSPHRASE }}
-        run: |
-          sshpass -p "$SSH_PASSPHRASE" scp -i ~/.ssh/private_key -o StrictHostKeyChecking=no docker-compose.production.yml ${{ secrets.USER }}@${{ secrets.HOST }}:/home/${{ secrets.USER }}/
-      
+        uses: appleboy/scp-action@master
+      # Передаём параметры для action appleboy/scp-action:
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USER }}
+          key: ${{ secrets.SSH_KEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          source: "docker-compose.production.yml"
+          target: "taski"
       - name: Executing remote ssh commands to deploy
-        env:
-          SSH_PASSPHRASE: ${{ secrets.SSH_PASSPHRASE }}
-        run: |
-          sshpass -p "$SSH_PASSPHRASE" ssh -i ~/.ssh/private_key -o StrictHostKeyChecking=no ${{ secrets.USER }}@${{ secrets.HOST }} "
-            # Создаем директорию проекта
-            mkdir -p taski
-            # Копируем docker-compose файл
-            cp docker-compose.production.yml taski/
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USER }}
+          key: ${{ secrets.SSH_KEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          # Параметр script передаёт в action appleboy/ssh-action команды,
+          # которые нужно выполнить на сервере, 
+          # с которым установлено соединение
+          script: |
             cd taski
             # Выполняет pull образов с Docker Hub
-            docker compose -f docker-compose.production.yml pull
+            sudo docker compose -f docker-compose.production.yml pull
             # Перезапускает все контейнеры в Docker Compose
-            docker compose -f docker-compose.production.yml down
-            docker compose -f docker-compose.production.yml up -d
+            sudo docker compose -f docker-compose.production.yml down
+            sudo docker compose -f docker-compose.production.yml up -d
             # Выполняет миграции и сбор статики
-            docker compose -f docker-compose.production.yml exec backend python manage.py migrate
-            docker compose -f docker-compose.production.yml exec backend python manage.py collectstatic --noinput
-            docker compose -f docker-compose.production.yml exec backend cp -r /app/collected_static/. /backend_static/static/
-          "
+            sudo docker compose -f docker-compose.production.yml exec backend python manage.py migrate
+            sudo docker compose -f docker-compose.production.yml exec backend python manage.py collectstatic
+            sudo docker compose -f docker-compose.production.yml exec backend cp -r /app/collected_static/. /backend_static/static/
 
   send_message:
     runs-on: ubuntu-latest
@@ -190,4 +180,4 @@ jobs:
       with:
         to: ${{ secrets.TELEGRAM_TO }}
         token: ${{ secrets.TELEGRAM_TOKEN }}
-        message: "🚀 Деплой успешно выполнен! Проект Taski обновлен на продакшн-сервере. Все тесты пройдены, образы собраны и загружены в Docker Hub."
+        message: Деплой успешно выполнен!
